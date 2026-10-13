@@ -1,0 +1,6 @@
+{
+  "name": "KHTN Smart Review – Trợ lý rà soát hồ sơ chuyên môn",
+  "description": "Ứng dụng hỗ trợ giáo viên Tổ Khoa học Tự nhiên đối chiếu Phụ lục với Syllabus, kiểm tra tính thống nhất, phát hiện nội dung chưa khớp và xác minh nguồn tham chiếu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
