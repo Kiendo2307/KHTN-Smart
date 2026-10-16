@@ -15,6 +15,7 @@ import {
   Layers,
   ArrowRight,
   BookOpen,
+  Edit3,
 } from 'lucide-react';
 import {
   SubjectField,
@@ -50,6 +51,47 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
   // Document list states
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
+  const [editingContentDoc, setEditingContentDoc] = useState<DocumentItem | null>(null);
+  const [editingContentText, setEditingContentText] = useState<string>('');
+
+  const handleAddNewManualDoc = (type: DocumentType = 'Syllabus') => {
+    const newDoc: DocumentItem = {
+      id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      name: `${type}_VanBan.txt`,
+      type,
+      size: 0,
+      format: 'txt',
+      status: 'error',
+      content: '',
+      wordCount: 0,
+      errorMessage: 'Chưa có nội dung. Nhấp "Dán / Sửa nội dung" để nhập dữ liệu.',
+      uploadedAt: new Date().toISOString(),
+    };
+    setDocuments((prev) => [...prev, newDoc]);
+    setEditingContentDoc(newDoc);
+    setEditingContentText('');
+  };
+
+  const handleSaveDocContent = () => {
+    if (!editingContentDoc) return;
+    const text = editingContentText.trim();
+    const wordCount = text ? text.split(/\s+/).length : 0;
+    setDocuments((prev) =>
+      prev.map((d) =>
+        d.id === editingContentDoc.id
+          ? {
+              ...d,
+              content: text,
+              wordCount,
+              status: text ? 'ready' : 'error',
+              errorMessage: text ? undefined : 'Chưa có nội dung',
+              size: text.length * 2,
+            }
+          : d
+      )
+    );
+    setEditingContentDoc(null);
+  };
 
   // Active criteria filter
   const [selectedCriteriaIds, setSelectedCriteriaIds] = useState<string[]>(() =>
@@ -537,6 +579,14 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
 
           <div className="flex items-center space-x-2">
             <button
+              type="button"
+              onClick={() => handleAddNewManualDoc(hasSyllabus ? 'Phụ lục' : 'Syllabus')}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition-colors flex items-center space-x-1"
+              title="Nhập hoặc dán nội dung văn bản trực tiếp"
+            >
+              <span>+ Nhập văn bản trực tiếp</span>
+            </button>
+            <button
               onClick={() => fileInputRef.current?.click()}
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl shadow-xs transition-colors flex items-center space-x-1.5"
             >
@@ -670,6 +720,19 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
 
                     {/* Action buttons */}
                     <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingContentDoc(doc);
+                          setEditingContentText(doc.content || '');
+                        }}
+                        className="p-1.5 text-blue-700 hover:bg-blue-50 rounded-lg text-xs flex items-center space-x-1 font-medium"
+                        title="Dán hoặc sửa nội dung văn bản trực tiếp"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Dán/Sửa nội dung</span>
+                      </button>
+
                       {doc.content && (
                         <button
                           onClick={() => setPreviewDoc(doc)}
@@ -930,6 +993,67 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
                 className="bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-slate-700"
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Text Edit / Paste Modal */}
+      {editingContentDoc && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Nhập / Dán nội dung: {editingContentDoc.name}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Bạn có thể sao chép và dán toàn bộ nội dung từ tệp Word, Excel hoặc đề cương vào đây
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingContentDoc(null)}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-500"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 flex flex-col min-h-0 bg-white">
+              <textarea
+                value={editingContentText}
+                onChange={(e) => setEditingContentText(e.target.value)}
+                placeholder="Dán nội dung Phụ lục hoặc Syllabus vào đây (bao gồm danh mục bài học, số tiết, yêu cầu cần đạt)..."
+                className="w-full flex-1 min-h-[300px] text-xs font-mono p-3.5 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-slate-800 leading-relaxed resize-none"
+              />
+              <div className="mt-2 text-xs text-slate-400 flex items-center justify-between">
+                <span>
+                  Số từ:{' '}
+                  {editingContentText.trim()
+                    ? editingContentText.trim().split(/\s+/).length.toLocaleString()
+                    : 0}{' '}
+                  từ
+                </span>
+                <span>Nội dung sẽ được bóc tách và đối chiếu trực tiếp</span>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end space-x-2">
+              <button
+                onClick={() => setEditingContentDoc(null)}
+                className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveDocContent}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-2xs"
+              >
+                Lưu nội dung tài liệu
               </button>
             </div>
           </div>

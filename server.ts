@@ -18,8 +18,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 const apiKey = process.env.GEMINI_API_KEY;
 let ai: GoogleGenAI | null = null;
@@ -106,12 +106,23 @@ app.post('/api/extract-text', async (req: Request, res: Response) => {
       }
     } else if (['.txt', '.md', '.csv', '.json'].includes(ext)) {
       extractedText = buffer.toString('utf-8');
+    } else if (ext === '.doc') {
+      // Legacy Word 97-2003 binary format
+      const raw = buffer.toString('utf-8').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ');
+      const cleanBlocks = raw.split(/\s{3,}/).filter((s) => s.trim().length > 15);
+      if (cleanBlocks.length > 5) {
+        extractedText = cleanBlocks.join('\n\n');
+      } else {
+        return res.status(400).json({
+          error: `Tệp "${filename}" thuộc định dạng Word cũ (.doc). Vui lòng mở tệp trên Word và chọn "Save As" sang định dạng .docx hoặc .pdf để AI trích xuất chuẩn xác nhất.`,
+        });
+      }
     } else {
       // Fallback try text or warn
       extractedText = buffer.toString('utf-8');
       if (!extractedText || extractedText.includes('\u0000')) {
         return res.status(400).json({
-          error: `Định dạng tệp ${ext} chưa được hỗ trợ trích xuất tự động. Vui lòng sử dụng tệp PDF, DOCX, XLSX hoặc TXT.`,
+          error: `Định dạng tệp ${ext || 'không xác định'} chưa được hỗ trợ. Vui lòng sử dụng tệp PDF, DOCX, XLSX hoặc TXT.`,
         });
       }
     }
@@ -656,6 +667,18 @@ Hãy trả về kết quả dưới định dạng JSON đúng schema.
       error: `Lỗi xử lý đối chiếu AI: ${error.message || 'Lỗi không xác định'}. Bạn có thể chọn Chế độ phân tích dự phòng để tiếp tục ngay.`,
     });
   }
+});
+
+// Global error handler to always return JSON (never HTML error pages)
+app.use((err: any, _req: Request, res: Response, next: any) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  console.error('Express global error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Lỗi xử lý máy chủ. Vui lòng thử lại.',
+    success: false,
+  });
 });
 
 // Mount Vite or static server
