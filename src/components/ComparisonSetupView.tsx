@@ -26,7 +26,7 @@ import {
   ReviewSession,
 } from '../types';
 import { extractFileText, runReviewAnalysis } from '../services/api';
-import { SAMPLE_BUNDLES, SampleBundle } from '../data/sampleDocs';
+import { SAMPLE_BUNDLES } from '../data/sampleDocs';
 
 interface ComparisonSetupViewProps {
   allCriteria: Criterion[];
@@ -44,7 +44,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
   // Scope selection states
   const [subject, setSubject] = useState<SubjectField>(initialSubject);
   const [grade, setGrade] = useState<GradeLevel>('Lớp 8');
-  const [scope, setScope] = useState<string>('Chương 2: Phản ứng hóa học (Bài 5 - Bài 7)');
+  const [scope, setScope] = useState<string>('');
   const [sessionTitle, setSessionTitle] = useState<string>('Đợt rà soát định kỳ Học kỳ I - Tổ KHTN');
   const [teacherAuthor, setTeacherAuthor] = useState<string>('Giáo viên Bộ môn');
 
@@ -258,40 +258,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
     }
   };
 
-  // Load sample documents package
-  const handleLoadSample = (sample: SampleBundle) => {
-    setSubject(sample.subject);
-    setGrade(sample.grade);
-    setScope(sample.scope);
-    setSessionTitle(`Rà soát: ${sample.title}`);
 
-    const doc1: DocumentItem = {
-      id: `sample-pl-${Date.now()}`,
-      name: sample.phuLucDoc.name,
-      type: 'Phụ lục',
-      size: sample.phuLucDoc.content.length * 2,
-      format: sample.phuLucDoc.name.endsWith('.docx') ? 'docx' : 'pdf',
-      status: 'ready',
-      content: sample.phuLucDoc.content,
-      wordCount: sample.phuLucDoc.content.trim().split(/\s+/).length,
-      uploadedAt: new Date().toISOString(),
-    };
-
-    const doc2: DocumentItem = {
-      id: `sample-syl-${Date.now()}`,
-      name: sample.syllabusDoc.name,
-      type: 'Syllabus',
-      size: sample.syllabusDoc.content.length * 2,
-      format: sample.syllabusDoc.name.endsWith('.docx') ? 'docx' : 'pdf',
-      status: 'ready',
-      content: sample.syllabusDoc.content,
-      wordCount: sample.syllabusDoc.content.trim().split(/\s+/).length,
-      uploadedAt: new Date().toISOString(),
-    };
-
-    setDocuments([doc1, doc2]);
-    setErrorMessage(null);
-  };
 
   // Toggle criterion
   const toggleCriterion = (id: string) => {
@@ -471,17 +438,6 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
               Nhập thông tin đợt rà soát, tải lên ít nhất 2 tài liệu chính và tùy chọn bộ tiêu chí chuyên môn
             </p>
           </div>
-
-          <div className="flex items-center space-x-2 self-start sm:self-auto">
-            <span className="text-xs text-slate-500 font-medium">Hoặc thử nhanh:</span>
-            <button
-              onClick={() => handleLoadSample(SAMPLE_BUNDLES[0])}
-              className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold px-3 py-1.5 rounded-lg border border-blue-200 transition-colors flex items-center space-x-1"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Nạp mẫu KHTN 8 (Hóa học)</span>
-            </button>
-          </div>
         </div>
 
         {/* Form: Scope parameters */}
@@ -531,7 +487,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
               type="text"
               value={teacherAuthor}
               onChange={(e) => setTeacherAuthor(e.target.value)}
-              placeholder="VD: Thầy Nguyễn Văn A - Nhóm Hóa 8"
+              placeholder="VD: Thầy Nguyễn Văn A - Giáo viên bộ môn"
               className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -544,7 +500,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
               type="text"
               value={scope}
               onChange={(e) => setScope(e.target.value)}
-              placeholder="VD: Chương 2: Phản ứng hóa học (Bài 5 - Bài 7) hoặc Toàn bộ Kế hoạch GD kì 1"
+              placeholder="VD: Học kỳ I, Chương 1 hoặc toàn bộ Kế hoạch GD năm học"
               className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
             />
           </div>

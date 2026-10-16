@@ -120,14 +120,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span>Mở kết quả hiện tại ({activeSession.subject})</span>
               </button>
             )}
-
-            <button
-              onClick={() => onLoadSample(SAMPLE_BUNDLES[0])}
-              className="inline-flex items-center space-x-2 bg-emerald-600/80 hover:bg-emerald-600 text-white border border-emerald-400/30 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Nạp nhanh mẫu KHTN 8 (Hóa học)</span>
-            </button>
           </div>
         </div>
 
