@@ -8,12 +8,14 @@ interface HeaderProps {
   activeTab: string;
   onNavigate: (tab: string) => void;
   activeSessionTitle?: string;
+  onOpenApiKeyModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   hasApiKey,
   activeTab,
   onNavigate,
+  onOpenApiKeyModal,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
@@ -39,28 +41,29 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Status Indicators & Actions */}
           <div className="flex items-center space-x-3">
-            {/* AI Status Badge */}
-            <div
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+            {/* AI Status Badge & Settings */}
+            <button
+              onClick={onOpenApiKeyModal}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer hover:opacity-90 ${
                 hasApiKey
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}
               title={
                 hasApiKey
-                  ? 'Gemini 3.8 Flash AI đã sẵn sàng'
-                  : 'Chưa có GEMINI_API_KEY. Bạn vẫn có thể sử dụng chế độ Demo minh họa.'
+                  ? 'Gemini AI đã sẵn sàng. Bấm để xem hoặc đổi API Key.'
+                  : 'Đang dùng Bộ phân tích nội bộ. Bấm để nhập Gemini API Key.'
               }
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">AI Engine:</span>
-              <span className="font-semibold">{hasApiKey ? 'Gemini 3.8 Flash' : 'Chế độ Demo'}</span>
+              <span className="font-semibold">{hasApiKey ? 'Gemini AI' : 'Bộ phân tích nội bộ'}</span>
               {hasApiKey ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
               ) : (
                 <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
               )}
-            </div>
+            </button>
 
             {/* Quick action to run review */}
             {activeTab !== 'compare' && (

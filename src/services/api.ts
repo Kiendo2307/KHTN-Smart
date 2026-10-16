@@ -2,6 +2,8 @@ import * as XLSX from 'xlsx';
 // @ts-ignore
 import mammoth from 'mammoth';
 import { Criterion, ReviewResultItem, SubjectField, GradeLevel } from '../types';
+import { getGeminiApiKey, runClientGeminiReview } from './geminiClient';
+import { analyzeDocumentsLocally } from './localAnalyzer';
 
 export interface ReviewApiResponse {
   success: boolean;
@@ -20,22 +22,37 @@ export interface ReviewApiResponse {
   error?: string;
 }
 
-export const checkServerStatus = async () => {
+export const checkServerStatus = async (): Promise<{
+  status: string;
+  hasApiKey: boolean;
+  isClientKey?: boolean;
+  isStaticDeployment?: boolean;
+  error?: string;
+}> => {
+  const clientKey = getGeminiApiKey();
+
   try {
-    const res = await fetch('/api/status');
-    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const res = await fetch('/api/status', { signal: AbortSignal.timeout(3000) });
     const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      return { status: 'ok', hasApiKey: true };
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      return {
+        ...data,
+        hasApiKey: Boolean(data.hasApiKey || clientKey),
+        isClientKey: !data.hasApiKey && Boolean(clientKey),
+      };
     }
-    return await res.json();
   } catch (err: any) {
-    return {
-      status: 'error',
-      hasApiKey: false,
-      error: err.message,
-    };
+    // Expected on static hosting like Netlify (no Express backend)
   }
+
+  // On Netlify / static deployment
+  return {
+    status: 'ok',
+    hasApiKey: Boolean(clientKey),
+    isClientKey: Boolean(clientKey),
+    isStaticDeployment: true,
+  };
 };
 
 export const fileToBase64 = (file: File): Promise<string> => {
@@ -45,6 +62,46 @@ export const fileToBase64 = (file: File): Promise<string> => {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (error) => reject(error);
   });
+};
+
+// Client-side PDF extraction using pdfjs-dist
+export const extractPdfInBrowser = async (file: File): Promise<{ text: string; wordCount: number; pageCount: number }> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfjs = await import('pdfjs-dist');
+
+  // Configure worker for browser environment
+  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version || '4.10.38'}/pdf.worker.min.mjs`;
+  }
+
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    useSystemFonts: true,
+  });
+
+  const pdf = await loadingTask.promise;
+  const numPages = pdf.numPages;
+  const pageTexts: string[] = [];
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const strings = textContent.items
+      .map((item: any) => item.str || '')
+      .filter((s: string) => s.trim().length > 0);
+    if (strings.length > 0) {
+      pageTexts.push(`--- Trang ${pageNum} ---\n` + strings.join(' '));
+    }
+  }
+
+  const fullText = pageTexts.join('\n\n').trim();
+  const wordCount = fullText ? fullText.split(/\s+/).length : 0;
+
+  return {
+    text: fullText,
+    wordCount,
+    pageCount: numPages,
+  };
 };
 
 export const extractFileText = async (file: File): Promise<{
@@ -90,7 +147,7 @@ export const extractFileText = async (file: File): Promise<{
         return { text, wordCount };
       }
     } catch (err: any) {
-      console.warn('Client-side Excel parsing error, falling back to server:', err);
+      console.warn('Client-side Excel parsing error, falling back:', err);
     }
   }
 
@@ -107,11 +164,23 @@ export const extractFileText = async (file: File): Promise<{
         }
       }
     } catch (err: any) {
-      console.warn('Client-side DOCX parsing error, falling back to server:', err);
+      console.warn('Client-side DOCX parsing error, falling back:', err);
     }
   }
 
-  // 4. Server-side extraction fallback (PDF, complex binary formats)
+  // 4. PDF documents (.pdf): extract in browser via pdfjs-dist
+  if (ext === 'pdf') {
+    try {
+      const result = await extractPdfInBrowser(file);
+      if (result.text && result.text.length > 20) {
+        return result;
+      }
+    } catch (pdfErr) {
+      console.warn('Client-side PDF parsing error, trying backend server:', pdfErr);
+    }
+  }
+
+  // 5. Server-side extraction fallback (if backend server is available)
   try {
     const base64 = await fileToBase64(file);
     const response = await fetch('/api/extract-text', {
@@ -129,23 +198,13 @@ export const extractFileText = async (file: File): Promise<{
     try {
       data = JSON.parse(rawText);
     } catch {
-      console.error('Server returned non-JSON text:', rawText.slice(0, 300));
+      // HTML response (e.g. Netlify 404 or SPA index.html)
       if (rawText.trim().startsWith('<!DOCTYPE') || rawText.includes('<html')) {
-        if (response.status === 413) {
-          throw new Error(
-            `Tệp "${file.name}" có dung lượng quá lớn (Mã 413 Payload Too Large). Vui lòng dùng tệp nhỏ hơn hoặc bấm nút "Dán/Sửa nội dung" để nhập trực tiếp.`
-          );
-        }
-        if (response.status === 502 || response.status === 504) {
-          throw new Error(
-            `Máy chủ đang tạm thời bận hoặc kết nối mạng bị gián đoạn (Mã ${response.status}). Vui lòng thử lại sau giây lát.`
-          );
-        }
         throw new Error(
-          `Máy chủ phản hồi trang web (HTML) thay vì dữ liệu JSON (Mã ${response.status}). Thường xảy ra khi tệp có định dạng phức tạp hoặc máy chủ đang khởi động lại. Bạn có thể bấm "Dán/Sửa nội dung" để dán nội dung trực tiếp.`
+          `Ứng dụng đang chạy ở môi trường Netlify tĩnh không có máy chủ nền để giải mã tệp "${file.name}". Vui lòng chuyển tệp sang định dạng .docx, .xlsx hoặc .txt để trích xuất trực tiếp trong trình duyệt, hoặc bấm "Dán/Sửa nội dung" để dán trực tiếp.`
         );
       }
-      throw new Error(`Dữ liệu máy chủ trả về không hợp lệ (Mã ${response.status}). Vui lòng thử lại.`);
+      throw new Error(`Dữ liệu máy chủ trả về không hợp lệ. Vui lòng thử lại.`);
     }
 
     if (!response.ok || !data.success) {
@@ -174,29 +233,53 @@ export const runReviewAnalysis = async (params: {
   isDemoMode?: boolean;
   forceLocalFallback?: boolean;
 }): Promise<ReviewApiResponse> => {
-  const response = await fetch('/api/review', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
+  // If force local fallback requested, run local analyzer on actual documents immediately
+  if (params.forceLocalFallback) {
+    return analyzeDocumentsLocally(params);
+  }
 
-  const rawText = await response.text();
-  let data: any = null;
+  // Check if user has configured client Gemini API key
+  const clientApiKey = getGeminiApiKey();
+
+  // Try server endpoint first if available
   try {
-    data = JSON.parse(rawText);
-  } catch {
-    console.error('Server returned non-JSON review text:', rawText.slice(0, 300));
-    if (rawText.trim().startsWith('<!DOCTYPE') || rawText.includes('<html')) {
-      throw new Error(
-        `Máy chủ trả về trang web HTML thay vì dữ liệu đối chiếu JSON (Mã ${response.status}). Vui lòng thử lại hoặc bật "Chế độ phân tích dự phòng" để hoàn thành rà soát ngay lập tức.`
-      );
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const contentType = response.headers.get('content-type') || '';
+    if (response.ok && contentType.includes('application/json')) {
+      const data = await response.json();
+      return data;
     }
-    throw new Error('Phản hồi đối chiếu từ máy chủ không hợp lệ. Vui lòng thử lại.');
+  } catch (e) {
+    // Server endpoint not reachable or timed out (e.g. Netlify static hosting)
+    console.log('Backend /api/review unavailable, using client-side execution path.');
   }
 
-  if (!response.ok) {
-    throw new Error(data?.error || 'Lỗi khi thực hiện phân tích đối chiếu');
+  // If client API key is available, run Gemini directly from browser!
+  if (clientApiKey) {
+    try {
+      return await runClientGeminiReview({
+        ...params,
+        apiKey: clientApiKey,
+      });
+    } catch (geminiErr: any) {
+      console.warn('Client Gemini AI call failed, falling back to local document analyzer:', geminiErr);
+      const fallbackResult = analyzeDocumentsLocally(params);
+      fallbackResult.fallbackNotice = `Không thể kết nối Gemini API (${geminiErr.message}). Đã tự động chuyển sang Bộ phân tích tài liệu cục bộ để đối chiếu trực tiếp tài liệu của bạn.`;
+      return fallbackResult;
+    }
   }
 
-  return data;
+  // If no Gemini API key (e.g. Netlify static deployment without key):
+  // Run the intelligent local document cross-check analyzer ON THE ACTUAL USER DOCUMENTS!
+  return analyzeDocumentsLocally(params);
 };

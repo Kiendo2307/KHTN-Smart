@@ -26,13 +26,14 @@ import {
   ReviewSession,
 } from '../types';
 import { extractFileText, runReviewAnalysis } from '../services/api';
-import { SAMPLE_BUNDLES } from '../data/sampleDocs';
+import { Key } from 'lucide-react';
 
 interface ComparisonSetupViewProps {
   allCriteria: Criterion[];
   hasApiKey: boolean;
   onReviewCompleted: (session: ReviewSession) => void;
   initialSubject?: SubjectField;
+  onOpenApiKeyModal?: () => void;
 }
 
 export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
@@ -40,6 +41,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
   hasApiKey,
   onReviewCompleted,
   initialSubject = 'Hóa học',
+  onOpenApiKeyModal,
 }) => {
   // Scope selection states
   const [subject, setSubject] = useState<SubjectField>(initialSubject);
@@ -308,49 +310,7 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
     }, 1200);
 
     try {
-      // If forceDemo or no API key, check if we have a matching sample bundle or generate structured demo review
-      if (forceDemo || !hasApiKey) {
-        // Wait a realistic delay for review experience
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        clearInterval(interval);
-
-        // Find if matches a known sample
-        const matchedSample = SAMPLE_BUNDLES.find((s) => s.subject === subject);
-        const sampleResults = matchedSample ? matchedSample.sampleResults : SAMPLE_BUNDLES[0].sampleResults;
-
-        const newSession: ReviewSession = {
-          id: `session-${Date.now()}`,
-          title: sessionTitle || `Đợt rà soát ${subject} ${grade}`,
-          createdAt: new Date().toISOString(),
-          subject,
-          grade,
-          scope: scope || 'Toàn bộ nội dung cung cấp',
-          documents: documents.map((d) => ({
-            id: d.id,
-            name: d.name,
-            type: d.type,
-            wordCount: d.wordCount,
-          })),
-          criteriaApplied: activeCriteria.map((c) => c.name),
-          summaryOverview: sampleResults.summaryOverview,
-          counts: {
-            total: sampleResults.items.length,
-            phuHop: sampleResults.items.filter((i) => i.resultStatus === 'Phù hợp').length,
-            canKiemTra: sampleResults.items.filter((i) => i.resultStatus === 'Cần kiểm tra').length,
-            chuaTimThay: sampleResults.items.filter((i) => i.resultStatus === 'Chưa tìm thấy căn cứ').length,
-            chuaDuDuLieu: sampleResults.items.filter((i) => i.resultStatus === 'Chưa đủ dữ liệu').length,
-            teacherConfirmed: 0,
-          },
-          items: sampleResults.items,
-          isDemo: true,
-          teacherAuthor,
-        };
-
-        onReviewCompleted(newSession);
-        return;
-      }
-
-      // Call server review API
+      // Perform AI or heuristic review analysis on the ACTUAL uploaded documents
       const res = await runReviewAnalysis({
         subject,
         grade,
@@ -359,8 +319,8 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
         phuLucDoc: { name: phuLuc.name, content: phuLuc.content },
         syllabusDoc: { name: syllabus.name, content: syllabus.content },
         extraDocs,
-        isDemoMode: false,
-        forceLocalFallback,
+        isDemoMode: forceDemo,
+        forceLocalFallback: forceLocalFallback || forceDemo,
       });
 
       clearInterval(interval);
@@ -1015,6 +975,33 @@ export const ComparisonSetupView: React.FC<ComparisonSetupViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* AI Engine & Netlify Status Banner */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center space-x-2.5">
+          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${hasApiKey ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          <div className="text-slate-700">
+            <span className="font-semibold text-slate-900">
+              {hasApiKey ? 'Mô hình AI: Gemini AI sẵn sàng' : 'Chế độ: Phân tích đối chiếu văn bản trực tiếp'}
+            </span>
+            <span className="text-slate-500 ml-1.5 hidden md:inline">
+              {hasApiKey
+                ? 'Rà soát ngữ nghĩa sâu theo chuẩn GDPT 2018 bằng mô hình Gemini.'
+                : 'Phân tích trực tiếp cấu trúc, số tiết, YCCĐ từ tài liệu bạn tải lên (Hoạt động ổn định trên Netlify).'}
+            </span>
+          </div>
+        </div>
+        {onOpenApiKeyModal && (
+          <button
+            type="button"
+            onClick={onOpenApiKeyModal}
+            className="inline-flex items-center space-x-1.5 text-blue-700 hover:text-blue-800 font-semibold bg-white hover:bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors shrink-0 shadow-2xs"
+          >
+            <Key className="w-3.5 h-3.5 text-blue-600" />
+            <span>{hasApiKey ? 'Đổi API Key' : 'Cài đặt Gemini API Key'}</span>
+          </button>
+        )}
+      </div>
 
       {/* Main Execution Actions */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200">

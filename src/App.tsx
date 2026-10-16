@@ -6,6 +6,7 @@ import { ComparisonSetupView } from './components/ComparisonSetupView';
 import { ReviewResultsView } from './components/ReviewResultsView';
 import { HistoryView } from './components/HistoryView';
 import { CriteriaSettingsView } from './components/CriteriaSettingsView';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { ReviewSession, Criterion, SubjectField } from './types';
 import { DEFAULT_CRITERIA } from './data/defaultCriteria';
 import { SAMPLE_BUNDLES, SampleBundle } from './data/sampleDocs';
@@ -21,6 +22,7 @@ export default function App() {
   // Server & AI status
   const [hasApiKey, setHasApiKey] = useState<boolean>(true);
   const [isServerReady, setIsServerReady] = useState<boolean>(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
 
   // Criteria State
   const [criteria, setCriteria] = useState<Criterion[]>(() => {
@@ -255,6 +257,7 @@ export default function App() {
         hasApiKey={hasApiKey}
         activeTab={activeTab}
         onNavigate={(tab) => setActiveTab(tab)}
+        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
       />
 
       <div className="flex-1 flex flex-col lg:flex-row max-w-7xl w-full mx-auto">
@@ -290,6 +293,7 @@ export default function App() {
               hasApiKey={hasApiKey}
               onReviewCompleted={handleReviewCompleted}
               initialSubject={setupInitialSubject}
+              onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
             />
           )}
 
@@ -320,6 +324,13 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Gemini API Key Configuration Modal for Netlify and Client-side */}
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onKeyUpdated={(hasKey) => setHasApiKey(hasKey)}
+      />
     </div>
   );
 }
